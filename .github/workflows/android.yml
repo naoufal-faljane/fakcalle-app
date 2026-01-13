@@ -18,11 +18,12 @@ jobs:
           node-version: 18
       - name: Install Dependencies
         run: npm install
-      - name: Build Web Project
-        run: npm run build
-      - name: Build Android with Capacitor
+      - name: Build Static Web Assets
+        run: npx next build
+      - name: Sync with Capacitor
+        run: npx cap sync
+      - name: Build Android App
         run: |
-          npx cap sync
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
