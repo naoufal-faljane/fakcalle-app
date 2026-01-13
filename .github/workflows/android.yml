@@ -1,9 +1,1 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  output: 'export', // هادا هو السطر اللي غيحل المشكل ديال العلامة الحمراء
-  images: {
-    unoptimized: true, 
-  },
-};
 
-export default nextConfig;
