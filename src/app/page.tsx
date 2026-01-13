@@ -1,21 +1,22 @@
 "use client";
-import React, { useEffect, useReducer, useCallback } from "react";
+import React, { useEffect, useReducer, useCallback, useState } from "react";
 import { generatePuzzle, checkWin, deepCloneGrid, updateErrors } from "@/lib/sudoku";
-import type { SudokuGrid, Cell, Difficulty, HistoryEntry } from "@/lib/types";
+import type { SudokuGrid, Difficulty } from "@/lib/types";
 import { useTimer } from "@/hooks/use-timer";
 import SudokuGridComponent from "@/components/sudoku/SudokuGrid";
 import Controls from "@/components/sudoku/Controls";
 import Header from "@/components/sudoku/Header";
 import NewGameDialog from "@/components/sudoku/NewGameDialog";
 import WinDialog from "@/components/sudoku/WinDialog";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const MAX_HISTORY = 10;
 
 interface GameState {
   difficulty: Difficulty;
-  initialGrid: SudokuGrid;
-  solvedGrid: number[][];
-  currentGrid: SudokuGrid;
+  initialGrid: SudokuGrid | null;
+  solvedGrid: number[][] | null;
+  currentGrid: SudokuGrid | null;
   selectedCell: { row: number; col: number } | null;
   history: SudokuGrid[];
   isNotesMode: boolean;
@@ -26,6 +27,7 @@ interface GameState {
 
 type Action =
   | { type: "NEW_GAME"; payload: { difficulty: Difficulty } }
+  | { type: "SET_INITIAL_STATE"; payload: { puzzleGrid: SudokuGrid, solvedGrid: number[][], difficulty: Difficulty } }
   | { type: "SELECT_CELL"; payload: { row: number; col: number } | null }
   | { type: "ENTER_NUMBER"; payload: { number: number } }
   | { type: "ERASE_CELL" }
@@ -34,24 +36,31 @@ type Action =
   | { type: "RESET_GAME" }
   | { type: "OPEN_NEW_GAME_DIALOG"; payload: boolean };
 
-const initialDifficulty: Difficulty = 'Easy';
-const { puzzleGrid, solvedGrid } = generatePuzzle(initialDifficulty);
-
 const initialState: GameState = {
-  difficulty: initialDifficulty,
-  initialGrid: puzzleGrid,
-  solvedGrid: solvedGrid,
-  currentGrid: deepCloneGrid(puzzleGrid),
+  difficulty: 'Easy',
+  initialGrid: null,
+  solvedGrid: null,
+  currentGrid: null,
   selectedCell: null,
   history: [],
   isNotesMode: false,
-  isGameRunning: true,
+  isGameRunning: false,
   isGameWon: false,
   isNewGameDialogOpen: false,
 };
 
 function gameReducer(state: GameState, action: Action): GameState {
   switch (action.type) {
+    case "SET_INITIAL_STATE": {
+        return {
+            ...initialState,
+            difficulty: action.payload.difficulty,
+            initialGrid: action.payload.puzzleGrid,
+            solvedGrid: action.payload.solvedGrid,
+            currentGrid: deepCloneGrid(action.payload.puzzleGrid),
+            isGameRunning: true,
+        }
+    }
     case "NEW_GAME": {
       const { puzzleGrid, solvedGrid } = generatePuzzle(action.payload.difficulty);
       return {
@@ -61,13 +70,14 @@ function gameReducer(state: GameState, action: Action): GameState {
         solvedGrid: solvedGrid,
         currentGrid: deepCloneGrid(puzzleGrid),
         isNewGameDialogOpen: false,
+        isGameRunning: true,
       };
     }
     case "SELECT_CELL": {
       return { ...state, selectedCell: action.payload };
     }
     case "ENTER_NUMBER": {
-      if (!state.selectedCell) return state;
+      if (!state.selectedCell || !state.currentGrid || !state.initialGrid || !state.solvedGrid) return state;
       const { row, col } = state.selectedCell;
       const originalCell = state.initialGrid[row][col];
       if (originalCell.isOriginal) return state;
@@ -100,7 +110,7 @@ function gameReducer(state: GameState, action: Action): GameState {
       };
     }
     case "ERASE_CELL": {
-      if (!state.selectedCell) return state;
+      if (!state.selectedCell || !state.currentGrid || !state.initialGrid) return state;
       const { row, col } = state.selectedCell;
       if (state.initialGrid[row][col].isOriginal) return state;
       
@@ -122,6 +132,7 @@ function gameReducer(state: GameState, action: Action): GameState {
       return { ...state, currentGrid: deepCloneGrid(lastGrid), history: newHistory };
     }
     case "RESET_GAME": {
+      if (!state.initialGrid) return state;
       return {
         ...state,
         currentGrid: deepCloneGrid(state.initialGrid),
@@ -141,6 +152,14 @@ function gameReducer(state: GameState, action: Action): GameState {
 export default function Home() {
   const [state, dispatch] = useReducer(gameReducer, initialState);
   const { time, formattedTime, resetTimer } = useTimer(state.isGameRunning);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+    const initialDifficulty: Difficulty = 'Easy';
+    const { puzzleGrid, solvedGrid } = generatePuzzle(initialDifficulty);
+    dispatch({ type: 'SET_INITIAL_STATE', payload: { puzzleGrid, solvedGrid, difficulty: initialDifficulty } });
+  }, []);
 
   const handleNewGame = useCallback((difficulty: Difficulty) => {
     dispatch({ type: "NEW_GAME", payload: { difficulty } });
@@ -175,6 +194,25 @@ export default function Home() {
   const openNewGameDialog = useCallback(() => {
     dispatch({ type: "OPEN_NEW_GAME_DIALOG", payload: true });
   }, []);
+
+  if (!isClient || !state.currentGrid) {
+    return (
+      <div className="flex flex-col items-center justify-between min-h-screen p-2 sm:p-4 bg-background text-foreground font-body">
+        <Header difficulty="Easy" time="00:00" />
+        <main className="flex flex-col items-center justify-center w-full">
+           <Skeleton className="w-full max-w-[500px] aspect-square" />
+        </main>
+        <footer className="w-full max-w-lg mt-4 flex flex-col gap-2 sm:gap-3">
+            <div className="grid grid-cols-5 gap-2">
+                {Array.from({length: 5}).map((_, i) => <Skeleton key={i} className="h-14 sm:h-16" />)}
+            </div>
+            <div className="grid grid-cols-9 gap-1 sm:gap-2">
+                {Array.from({length: 9}).map((_, i) => <Skeleton key={i} className="h-12 sm:h-14" />)}
+            </div>
+        </footer>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-between min-h-screen p-2 sm:p-4 bg-background text-foreground font-body">
